@@ -4,8 +4,9 @@ before_install:
   - curl -OL http://raw.github.com/craigcitro/r-travis/master/scripts/travis-tool.sh
   - chmod 755 ./travis-tool.sh
   - ./travis-tool.sh bootstrap
+  - git clone git@github.com:soc504-s2015-princeton/scripts.git
 
 install:
   - ./travis-tool.sh github_package jimhester/lintr
 
-script: Rscript -e 'lintr::lint("bad.R")' && Rscript -e 'lintr::lint("good.R")'
+script: ./scripts/travis-linter.sh
