@@ -1,0 +1,263 @@
+---
+title: "Homework 2: Visualizing data"
+author: "your name here"
+date: "Due: Sunday, Feb 15, 2015"
+output: html_document
+---
+
+Topics covered in this homework include:
+
+- data tidying
+- dplyr 
+- ggplot2
+
+
+### Let's return to Prof. Rodriguez's final exam from last semester.  Now you will redo some of the same problems using dplyr and ggplot2.
+
+From your exam: "The data fraem Robey in the `car` package has data on fertility and contraceptive use in 50 developing countries around 1990.  There are three variables (1) region, a factor with four levels (Africa, Asia, Latin America, and Near East) (2) tfr, the total fertiility rate, the average number of children that a women would have over her lifetime at current rates (usually abbreviated TFR), and (3) contraceptors, the precentage of contraception among women of childbearing age."
+
+(@) **"Let us say that a country has undergone a contraceptive revolution when at least half of the women in childbearing age use contraception.  Calculate and plot the proportion of countries that have achived this milestone by region."  Be sure to use dplyr and ggplot2.**
+
+```{r}
+library(car)
+library(dplyr)
+library(ggplot2)
+
+data.to.plot <- Robey %>% 
+                  mutate(revolution = (contraceptors > 50) ) %>%
+                  group_by(region) %>%
+                  summarise(prop.revolution = mean(revolution))
+
+p <- ggplot(data.to.plot, aes(x=region, y=prop.revolution)) 
+p + geom_bar(stat="identity")
+
+# Now let's improve labels and order (alphabetical order is not a good order)
+data.to.plot$region <- reorder(data.to.plot$region, data.to.plot$prop.revolution)
+# to learn more about reordering factors see: https://kohske.wordpress.com/2010/12/29/faq-how-to-order-the-factor-variables-in-ggplot2/
+
+p <- ggplot(data.to.plot, aes(x=region, y=prop.revolution)) 
+p + geom_bar(stat="identity") + 
+  scale_x_discrete(name = "Region") + 
+  scale_y_continuous(name = "Proportion with > 50% contraceptive use")
+```
+
+(@) **"Compute the average TFR in each region and plot your results."  Be sure to use dplyr and ggplot2.**
+
+```{r}
+data.to.plot <- Robey %>% 
+                  group_by(region) %>%
+                  summarise(mean.tfr = mean(tfr))
+
+p <- ggplot(data.to.plot, aes(x=region, y=mean.tfr)) 
+p + geom_point()
+
+# Now let's improve labels and order (alphabetical order is not a good order)
+data.to.plot$region <- reorder(data.to.plot$region, data.to.plot$mean.tfr)
+# to learn more about reordering factors see: https://kohske.wordpress.com/2010/12/29/faq-how-to-order-the-factor-variables-in-ggplot2/
+
+p <- ggplot(data.to.plot, aes(x=mean.tfr, y=region)) 
+p + geom_point() + 
+  scale_x_continuous(name = "Mean Total Fertility Rate") +
+  scale_y_discrete(name = "Region") 
+```
+
+(@) **"Plot the TFR against the proportion of married women using contraception and superimpose a regression line." **
+
+```{r}
+p <- ggplot(Robey, aes(x=contraceptors, y=tfr)) 
+p + geom_point() + stat_smooth(method = "lm")
+```
+
+(@) **Next, create the same plot but with 4 factets, one for each region. **
+
+```{r}
+p <- ggplot(Robey, aes(x=contraceptors, y=tfr)) 
+p + geom_point() + stat_smooth(method = "lm") + facet_grid(. ~ region)  
+```
+
+(@) **In words, what would you conclude from the graph above. **
+
+```{answer}
+There is a negative relationship between contraceptive use and TFR in all four regions in this data.
+```
+
+### Next you are going to reproduce and extend this graph by Brad Boehmke that shows median income growth rate by state.
+
+<src img="images/median_income_trends.png">
+
+You can read about it and see all of his code here: https://rpubs.com/bradleyboehmke/median_income_trends
+
+The start code below gets you to where Brad Boehmke's code begins.  
+
+```{r echo=FALSE}
+# Preprocessing & summarizing data
+library(dplyr)
+library(tidyr)
+
+# Visualizatin development
+library(grid)
+library(scales)
+library(ggplot2)
+
+library(xlsx)
+# h08.xls is the spreadsheet that was downlaoded from the census website
+# https://www.census.gov/hhes/www/income/data/historical/household/2013/h08.xls
+data <- read.xlsx("data/h08.xls", sheetName="h08",
+                  startRow=62, endRow=113, header=FALSE)
+
+# remove all standard error columns
+se.columns <- seq(from=3, to=61, by=2)
+data <- select(data, -se.columns)
+
+# check size
+if (ncol(data) != 31) {
+  # state + 30 years (1984 - 2013)
+  stop("ERROR: ncol(data) != 31")
+}
+if (nrow(data) != 52) {
+  # 50 states + plus DC + US
+  stop("ERROR: nrow(data) != 52")
+}
+
+# create column names
+years <- seq(from = 2013, to = 1984)
+years.with.x <- paste("X", years, sep="")
+c.names <- c("State", years.with.x)
+colnames(data) <- c.names
+
+# check that data is the same as the data file he is using
+print(data)
+```
+
+(@) Write code to reproduce the graph above.  
+
+A few notes:
+
+- In the past we have recommended using `tbl_df()` but we don't recommend that here because it will conflict with some of the way Boehmke wrote his code.  If you want to use tbl_df() you will need to rewrite some of Boehmke's code.
+
+- In step 7 of the code, you should do as much as possible with ggplot2.  Do not use illustrator or any other program.  We want to avoid things that are not automated.
+
+
+```{r}
+# clean overall U.S. data and turn it into long format
+us <- data %>%
+        filter(State == "United States") %>%
+        gather(Year, Income, X2013:X1984) %>%
+        separate(Year, c("left","Year"), sep="X") %>%
+        select(-left) %>%
+        arrange(Year)
+
+# extract 1984 value as the baseline value and add to us dataframe
+us_base <- us[us$Year==1984,3]
+us$us_baseline <- us_base
+
+# calculate the percent change in U.S. median income for each year as compared
+# to 1984 (aka the baseline)
+us <- us %>% mutate(us_change = (Income-us_baseline)/us_baseline)
+
+
+# create a states dataframe, clean and turn into long format
+states <- data %>%
+        filter(State != "United States") %>%
+        gather(Year, Income, X2013:X1984) %>%
+        separate(Year, c("left","Year"), sep="X") %>%
+        select(-left) %>%
+        arrange(Year) %>%
+        filter(Income != "NA")
+
+# create baselines for each state
+state_base <- states %>%
+        filter(Year == 1984) %>%
+        select(State, State_Baseline = Income)
+
+# add baseline to the states and calculate the percent change in median income
+# for each state as compared to 1984 (aka the baseline)
+states <- states %>%
+        left_join(state_base) %>%
+        arrange(State) %>%
+        mutate(state_change = (Income-State_Baseline)/State_Baseline)
+
+# change year variables from character to numeric
+states$Year <- as.numeric(states$Year)
+us$Year <- as.numeric(us$Year)
+
+# get top 5 and bottom 5 states which will allow me to identify them
+# graphically
+rank <- states %>% 
+        filter(Year == 2013) %>% 
+        arrange(desc(state_change)) %>%
+        mutate(rank = seq(1,length(State), by=1)) %>%
+        filter(rank < 6 | rank > 46 )
+
+
+
+p <- ggplot(states, aes(Year, state_change, group=State)) +
+        theme_bw() +
+        theme(plot.background = element_blank(),
+              panel.grid.minor = element_blank(),
+              panel.grid.major.x = element_blank(),
+              panel.grid.major.y = element_line(linetype = 3, colour = "grey50"),
+              panel.border = element_blank(),
+              panel.background = element_blank(),
+              axis.ticks = element_blank(),  
+              axis.title = element_blank()) +
+        geom_line(colour="grey90", alpha=.9)
+
+print(p)
+
+
+p <- p +
+        geom_line(data=us, aes(Year, us_change, group=1), linetype=5)
+
+print(p)
+
+p <- p +
+        geom_line(data=filter(states, State=="Ohio"), 
+                  aes(Year, state_change, group=State), colour="dodgerblue", size = 1)
+
+print(p)
+
+### Step 4
+p <- p +
+        geom_line(data=filter(states, State=="D.C."), 
+                  aes(Year, state_change, group=State), colour="grey70") +
+        geom_line(data=filter(states, State=="Nevada"), 
+                  aes(Year, state_change, group=State), colour="grey70")
+
+print(p)
+
+### Step 5
+
+p <- p +
+        geom_point(data=rank, aes(Year, state_change), shape=21, size=1.5, alpha=.6) +
+        geom_point(data=filter(us, Year == 2013), aes(Year, us_change), size=2.5, alpha=.6)
+
+print(p)
+
+### Step 6
+
+p <- p +
+        scale_y_continuous(limits=c(-.2,.55), breaks=seq(-.2,.4,by=.2), label=percent) +
+        scale_x_continuous(limits=c(1983,2013),breaks=seq(1985,2010,by=5), expand=c(0,.25))
+
+print(p)
+
+### Step 7
+
+# Note that you should do as many of these annotations as possible in ggplot2, do not use illustrator
+```
+
+(@) Modify or extend the graph somehow.
+
+```{r}
+# [ your code here ]
+```
+
+
+#### The command below is helpful for debugging, please don't change it
+
+```{r echo=FALSE}
+sessionInfo()
+```
+
+
